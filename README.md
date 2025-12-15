@@ -42,3 +42,33 @@ Quand un joueur recoit une demande de matche il peut :
 Quand un joueurs est en matche, il peut :
     - envoyer au server la colone dans laquelle il vas jouer
     - recevoir la grille
+
+# Architecture
+
+ProjetVirtualisation/
+│
+├── docker-compose.yml
+├── README.md
+│
+├── server/
+│   ├── Dockerfile
+│   ├── requirements.txt
+│   ├── server.py
+│   ├── game_manager.py
+│   ├── game.py
+│   └── utils/
+│       ├── __init__.py
+│       └── protocol.py
+│
+├── player/
+│   ├── Dockerfile
+│   ├── requirements.txt
+│   ├── player.py
+│   ├── ai_player.py
+│   └── utils/
+│       ├── __init__.py
+│       └── protocol.py
+│
+└── shared/
+    └── protocol.py
+
