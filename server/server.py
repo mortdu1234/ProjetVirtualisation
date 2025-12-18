@@ -5,6 +5,11 @@ import socket
 import threading
 import json
 from game import Connect4Game
+
+from pathlib import Path
+import sys
+
+sys.path.append(str(Path(__file__).parent.parent))
 from shared.protocol import Protocol
 
 

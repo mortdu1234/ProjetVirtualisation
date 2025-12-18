@@ -5,7 +5,9 @@ import socket
 import threading
 import json
 import sys
+from pathlib import Path
 
+sys.path.append(str(Path(__file__).parent.parent))
 from shared.protocol import Protocol
 
 class Player:
