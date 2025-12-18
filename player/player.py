@@ -3,11 +3,12 @@ Client joueur pour Puissance 4
 """
 import socket
 import threading
-import json
 import sys
 from pathlib import Path
 
+# Ajouter le répertoire parent au path pour les imports
 sys.path.append(str(Path(__file__).parent.parent))
+
 from shared.protocol import Protocol
 
 class Player:
@@ -48,14 +49,21 @@ class Player:
     
     def listen_server(self):
         """Écoute les messages du serveur"""
+        buffer = b""
+        
         while self.running:
             try:
                 data = self.socket.recv(4096)
                 if not data:
                     break
                 
-                msg_type, msg_data = Protocol.decode(data)
-                self.handle_server_message(msg_type, msg_data)
+                buffer += data
+                
+                # Traite tous les messages complets dans le buffer
+                while b'\n' in buffer:
+                    message, buffer = buffer.split(b'\n', 1)
+                    msg_type, msg_data = Protocol.decode(message + b'\n')
+                    self.handle_server_message(msg_type, msg_data)
             
             except Exception as e:
                 if self.running:
@@ -74,7 +82,7 @@ class Player:
         elif msg_type == Protocol.CHALLENGE_RECEIVED:
             self.pending_challenger = msg_data
             print(f"\n🎯 {msg_data['challenger_name']} vous défie!")
-            print("Tapez 'accept' pour accepter ou 'refuse' pour refuser")
+            print("Tapez 'yes' pour accepter ou 'no' pour refuser")
         
         elif msg_type == Protocol.CHALLENGE_REFUSED:
             print(f"\n❌ {msg_data['message']}")
@@ -82,9 +90,10 @@ class Player:
         elif msg_type == Protocol.GAME_START:
             self.in_game = True
             self.my_player_number = msg_data["your_number"]
+            self.player_name = msg_data["your_name"]  # Stocke notre nom
             print(f"\n🎲 Partie démarrée!")
-            print(f"   Joueur 1 (X): {msg_data['player1']}")
-            print(f"   Joueur 2 (O): {msg_data['player2']}")
+            print(f"   Joueur 1 (🔴): {msg_data['player1']}")
+            print(f"   Joueur 2 (🟡): {msg_data['player2']}")
             print(f"   Vous êtes le joueur {self.my_player_number}")
         
         elif msg_type == Protocol.GAME_UPDATE:
@@ -97,19 +106,34 @@ class Player:
                     print("🔵 C'est votre tour! Choisissez une colonne (0-6):")
                 else:
                     print("⏳ En attente du coup adverse...")
+            else:
+                # Affichage final du plateau avant le message de fin
+                winner_id = msg_data.get("winner_id")
+                if winner_id:
+                    if winner_id == self.player_id:
+                        print("🎉 Vous avez aligné 4 pions!")
+                    else:
+                        print("😔 Votre adversaire a aligné 4 pions!")
         
         elif msg_type == Protocol.GAME_OVER:
             self.in_game = False
             winner = msg_data.get("winner")
+            winner_id = msg_data.get("winner_id")
+            you_won = msg_data.get("you_won")
             reason = msg_data.get("reason", "")
             
+            print("\n" + "="*50)
             if winner:
-                if reason:
-                    print(f"\n🏆 {winner} gagne! ({reason})")
+                # Utilise le nom stocké pour comparer
+                if you_won or (winner == self.player_id):
+                    print("🏆 VICTOIRE! Vous avez gagné! 🏆")
                 else:
-                    print(f"\n🏆 {winner} gagne!")
+                    print(f"😔 DÉFAITE! {winner} a gagné!")
+                if reason:
+                    print(f"Raison: {reason}")
             else:
-                print("\n🤝 Match nul!")
+                print("🤝 MATCH NUL! Le plateau est rempli!")
+            print("="*50)
             
             print("\nTapez 'list' pour voir les joueurs disponibles")
         
@@ -128,10 +152,10 @@ class Player:
     
     def display_board(self):
         """Affiche le plateau de jeu"""
-        symbols = {0: '·', 1: '🔴', 2: '🟡'}
-        print("\n  0 1 2 3 4 5 6")
+        symbols = {0: '· ', 1: '🔴', 2: '🟡'}
+        print("\n  0   1   2   3   4   5   6")
         for row in self.current_board:
-            print("  " + " ".join(symbols[cell] for cell in row))
+            print("  " + "  ".join(symbols[cell] for cell in row))
         print()
     
     def request_player_list(self):
@@ -141,6 +165,9 @@ class Player:
     
     def challenge_player(self, opponent_id):
         """Défie un joueur"""
+        if opponent_id == self.player_id:
+            print("⚠️  Vous ne pouvez pas vous défier vous-même")
+            return
         msg = Protocol.encode(Protocol.CHALLENGE, {"opponent_id": opponent_id})
         self.socket.send(msg)
         print(f"⏳ Défi envoyé, en attente de réponse...")
@@ -191,19 +218,20 @@ class Player:
                 pass
         print("👋 Déconnecté")
     
+    def get_help(self):
+        """Affiche l'aide"""
+        print("\nCommandes disponibles:")
+        print("  help           - Afficher cette aide")
+        print("  list           - Afficher les joueurs disponibles")
+        print("  challenge <id> - Défier un joueur")
+        print("  quit           - Quitter\n")
+
     def run(self):
         """Boucle principale du joueur"""
         print("\n" + "="*50)
         print("🎮 PUISSANCE 4 - CLIENT")
         print("="*50)
-        print("\nCommandes disponibles:")
-        print("  list           - Afficher les joueurs disponibles")
-        print("  challenge <id> - Défier un joueur")
-        print("  accept         - Accepter un défi")
-        print("  refuse         - Refuser un défi")
-        print("  0-6            - Jouer dans une colonne (en jeu)")
-        print("  quit           - Quitter")
-        print()
+        self.get_help()
         
         while self.running:
             try:
@@ -223,10 +251,10 @@ class Player:
                     opponent_id = user_input.split()[1]
                     self.challenge_player(opponent_id)
                 
-                elif user_input == "accept":
+                elif user_input == "yes":
                     self.accept_challenge()
                 
-                elif user_input == "refuse":
+                elif user_input == "no":
                     self.refuse_challenge()
                 
                 elif user_input.isdigit():
@@ -235,7 +263,8 @@ class Player:
                         self.play_move(column)
                     else:
                         print("⚠️  Colonne invalide (0-6)")
-                
+                elif user_input == "help":
+                    self.get_help()
                 else:
                     print("⚠️  Commande inconnue. Tapez 'help' pour l'aide")
             

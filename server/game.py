@@ -15,10 +15,15 @@ class Connect4Game:
     
     def get_board_state(self):
         """Retourne l'état actuel du plateau"""
+        winner_id = None
+        if self.winner:
+            winner_id = self.player1_id if self.winner == 1 else self.player2_id
+        
         return {
             "board": self.board,
             "current_player": self.current_player,
             "winner": self.winner,
+            "winner_id": winner_id,
             "game_over": self.game_over
         }
     

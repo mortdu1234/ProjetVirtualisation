@@ -3,15 +3,14 @@ Serveur de jeu Puissance 4
 """
 import socket
 import threading
-import json
-from game import Connect4Game
-
-from pathlib import Path
 import sys
+from pathlib import Path
 
+# Ajouter le répertoire parent au path pour les imports
 sys.path.append(str(Path(__file__).parent.parent))
-from shared.protocol import Protocol
 
+from shared.protocol import Protocol
+from game import Connect4Game
 
 class GameServer:
     def __init__(self, host='0.0.0.0', port=5555):
@@ -51,6 +50,7 @@ class GameServer:
     def handle_client(self, client_socket, address):
         """Gère la communication avec un client"""
         player_id = None
+        buffer = b""
         
         try:
             while True:
@@ -58,28 +58,33 @@ class GameServer:
                 if not data:
                     break
                 
-                msg_type, msg_data = Protocol.decode(data)
+                buffer += data
                 
-                if msg_type == Protocol.REGISTER:
-                    player_id = self.register_player(client_socket, msg_data)
-                
-                elif msg_type == Protocol.LIST_PLAYERS:
-                    self.send_player_list(player_id)
-                
-                elif msg_type == Protocol.CHALLENGE:
-                    self.handle_challenge(player_id, msg_data)
-                
-                elif msg_type == Protocol.CHALLENGE_ACCEPTED:
-                    self.start_game(msg_data["challenger_id"], player_id)
-                
-                elif msg_type == Protocol.CHALLENGE_REFUSED:
-                    self.handle_challenge_refused(msg_data["challenger_id"], player_id)
-                
-                elif msg_type == Protocol.PLAY_MOVE:
-                    self.handle_move(player_id, msg_data)
-                
-                elif msg_type == Protocol.DISCONNECT:
-                    break
+                # Traite tous les messages complets dans le buffer
+                while b'\n' in buffer:
+                    message, buffer = buffer.split(b'\n', 1)
+                    msg_type, msg_data = Protocol.decode(message + b'\n')
+                    
+                    if msg_type == Protocol.REGISTER:
+                        player_id = self.register_player(client_socket, msg_data)
+                    
+                    elif msg_type == Protocol.LIST_PLAYERS:
+                        self.send_player_list(player_id)
+                    
+                    elif msg_type == Protocol.CHALLENGE:
+                        self.handle_challenge(player_id, msg_data)
+                    
+                    elif msg_type == Protocol.CHALLENGE_ACCEPTED:
+                        self.start_game(msg_data["challenger_id"], player_id)
+                    
+                    elif msg_type == Protocol.CHALLENGE_REFUSED:
+                        self.handle_challenge_refused(msg_data["challenger_id"], player_id)
+                    
+                    elif msg_type == Protocol.PLAY_MOVE:
+                        self.handle_move(player_id, msg_data)
+                    
+                    elif msg_type == Protocol.DISCONNECT:
+                        break
         
         except Exception as e:
             print(f"Erreur avec le client {address}: {e}")
@@ -166,14 +171,19 @@ class GameServer:
             self.players[player2_id]["in_game"] = True
             self.players[player2_id]["game_id"] = game_id
             
+            # Récupère les noms
+            player1_name = self.players[player1_id]["name"]
+            player2_name = self.players[player2_id]["name"]
+            
             # Notifie les joueurs
             game_start_msg = Protocol.encode(
                 Protocol.GAME_START,
                 {
                     "game_id": game_id,
-                    "player1": self.players[player1_id]["name"],
-                    "player2": self.players[player2_id]["name"],
-                    "your_number": 1
+                    "player1": player1_name,
+                    "player2": player2_name,
+                    "your_number": 1,
+                    "your_name": player1_name
                 }
             )
             self.players[player1_id]["socket"].send(game_start_msg)
@@ -182,14 +192,15 @@ class GameServer:
                 Protocol.GAME_START,
                 {
                     "game_id": game_id,
-                    "player1": self.players[player1_id]["name"],
-                    "player2": self.players[player2_id]["name"],
-                    "your_number": 2
+                    "player1": player1_name,
+                    "player2": player2_name,
+                    "your_number": 2,
+                    "your_name": player2_name
                 }
             )
             self.players[player2_id]["socket"].send(game_start_msg)
             
-            print(f"🎲 Partie {game_id} démarrée: {self.players[player1_id]['name']} vs {self.players[player2_id]['name']}")
+            print(f"🎲 Partie {game_id} démarrée: {player1_name} vs {player2_name}")
             
             # Envoie l'état initial
             self.send_game_update(game_id)
@@ -235,17 +246,33 @@ class GameServer:
         game = self.games[game_id]
         
         winner_name = None
+        winner_id = None
         if game.winner:
             winner_id = game.player1_id if game.winner == 1 else game.player2_id
             winner_name = self.players[winner_id]["name"]
         
-        game_over_msg = Protocol.encode(
-            Protocol.GAME_OVER,
-            {"winner": winner_name}
-        )
-        
-        self.players[game.player1_id]["socket"].send(game_over_msg)
-        self.players[game.player2_id]["socket"].send(game_over_msg)
+        # Envoie un message personnalisé à chaque joueur
+        for pid in [game.player1_id, game.player2_id]:
+            if winner_id:
+                you_won = (pid == winner_id)
+                game_over_msg = Protocol.encode(
+                    Protocol.GAME_OVER,
+                    {
+                        "winner": winner_name,
+                        "winner_id": winner_id,
+                        "you_won": you_won
+                    }
+                )
+            else:
+                game_over_msg = Protocol.encode(
+                    Protocol.GAME_OVER,
+                    {
+                        "winner": None,
+                        "winner_id": None,
+                        "you_won": None
+                    }
+                )
+            self.players[pid]["socket"].send(game_over_msg)
         
         # Marque les joueurs comme disponibles
         self.players[game.player1_id]["in_game"] = False
