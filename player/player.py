@@ -168,6 +168,9 @@ class Player:
         if opponent_id == self.player_id:
             print("⚠️  Vous ne pouvez pas vous défier vous-même")
             return
+        if self.in_game:
+            print("⚠️  Vous êtes déjà en jeu")
+            return
         msg = Protocol.encode(Protocol.CHALLENGE, {"opponent_id": opponent_id})
         self.socket.send(msg)
         print(f"⏳ Défi envoyé, en attente de réponse...")
