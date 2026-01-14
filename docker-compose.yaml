@@ -1,0 +1,20 @@
+version: "3.9"
+
+services:
+  server:
+    build:
+      context: .
+      dockerfile: server/Dockerfile
+    image: localhost:5000/server:latest
+    ports:
+      - "5555:5555"
+
+  player:
+    build:
+      context: .
+      dockerfile: player/Dockerfile
+    image: localhost:5000/player:latest
+    depends_on:
+      - server
+    stdin_open: true   # équivalent -i
+    tty: true          # équivalent -t
