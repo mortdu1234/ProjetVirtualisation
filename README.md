@@ -23,8 +23,8 @@ Language de Programmation :
 Lancement du server : écoute en continue sur un port XXXX
 Lancerment d'un 
 Création d'un server, qui ecoute en continue un port
-a chaque fois qu'il recoit un une info sur ce port, rajoute un joueur
-joueur : envois message au server sur le port XXXX : "coucou je suis une joueur"
+a chaque fois qu'il recoit une info sur ce port, rajoute un joueur
+joueur : envois message au server sur le port XXXX : "coucou je suis un joueur"
                         le server transmet la connection sur un port privé
 
 Un joueur qui ne joue pas, peut :
